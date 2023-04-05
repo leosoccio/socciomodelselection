@@ -1,0 +1,207 @@
+---
+title: "Simulating Data Part 1"
+author: "Leo Soccio"
+output: html_notebook
+---
+
+## Front Matter
+```{r}
+library(tidyverse)
+library(mosaic)
+```
+
+## Task Set 1
+
+### Part 1
+
+1.	Modify the code I sent you to generate data from a simple linear regression model but add 5 junk variables. (I think the code I sent has 2 junk variables.) Also modify the code so that you have 100 data points instead of 50.
+```{r}
+set.seed(12345)
+x <- runif(n = 100, min = 5, max = 7)
+epsilon <- rnorm(100, mean = 0, sd = sqrt(0.5))
+y <- 3 - 5 * x + epsilon
+
+junk1 <- runif(n = 100, min = 0, max = 1)
+junk2 <- runif(n = 100, min = -5, max = 5)
+junk3 <- runif(n=100, min=3, max = 5)
+junk4 <- runif(n=100, min=10, max = 20)
+junk5 <- runif(n=100, min=-2, max=0)
+```
+
+
+2.	Create a data frame that has y, x, and the 5 junk variables.
+```{r}
+df <- data.frame(y,x,junk1,junk2,junk3,junk4,junk5)
+```
+
+
+3.	Create a scatterplot showing the relationship between x and y and include a linear smoother to verify that the data generating process worked.
+```{r}
+ggplot(df, aes(x=x,y=y))+
+  geom_point()+
+  geom_smooth(method="lm", se=FALSE)
+```
+
+
+4.	Perform a 80/20 training/testing split. Use a seed of 12345. I am not sure how/if you have covered this in 380. So, if you have no idea what that means, please ask instead of trying to figure out what I meant.
+```{r}
+set.seed(12345)
+fold<-sample(1:nrow(df),nrow(df)/5)
+train <- df%>%slice(-fold)
+test <- df%>%slice(fold)
+```
+
+5.	Using the train, implement backward elimination and note which variables were selected. Then build the model on the selected variables and write down the estimated regression equation. How close is the estimated equation to the true equation used when simulating the data?
+```{r}
+full_model <- lm(y~., data=train)
+backward_model<-step(full_model,direction="backward",scope=formula(full_model))
+summary(backward_model)
+```
+The regression equation produced by backwards selection is $y=3.74223-5.10512*x-0.05913*Junk2$
+
+The real equation used is y=3-5x, so this model is pretty close to that, though it did select a junk variable that has no impact on the true model. Given how small the coefficient is on the junk2 variable, this model likely does a decent job predicting data regardless of the junk variable's inclusion.
+
+
+6.	Using the train, implement forward selection and note which variables were selected. Then build the model on the selected variables and write down the estimated regression equation. How close is the estimated equation to the true equation used when simulating the data?
+```{r}
+null_model <- lm(y~1,data=train)
+forward_model<-step(null_model,direction="forward",scope=formula(full_model))
+summary(forward_model)
+```
+The regression equation produced by forward selection is $y=3.74223-5.10512*x-0.05913*Junk2$
+
+Given that this model is exactly identical to the one produced by backward selection, the same conclusions can be drawn. The coefficient for x and the intercept are pretty close to what they really are, but once again Junk2 is chosen and added to the model with a very low coefficient. Since Junk2 is between -5 and 5, the variable can only affect y by a maximum of about 0.3 and a minimum of about -0.3. When the y values have a range of about 12, the effect of Junk2 is minimal compared to the effect x has on the response.
+
+### Part 2
+
+1.	Extract the estimated coefficients from the model you built using the selected variables in Step 5
+```{r}
+BWM_coefs<-coef(backward_model)
+BWM_coefs
+```
+
+2.	Extract the R^2, adjusted R^2, and the estimated value of sigma (standard deviation of the error terms) from the model you built using the selected variables in Step 5 (harder than 1)
+```{r}
+backward_summary<-summary(backward_model)
+names(backward_summary)
+BWM_rsq <- backward_summary$r.squared
+BWM_adjrsq <- backward_summary$adj.r.squared
+BWM_sig <- backward_summary$sigma
+BWM_stats <- c(BWM_rsq,BWM_adjrsq,BWM_sig)
+BWM_stats
+```
+
+3.	Extract the names of the variables selected from the backward elimination procedure (hardest task)
+```{r}
+BWM_vars<-variable.names(backward_model)[variable.names(backward_model)!="(Intercept)"]
+BWM_vars
+# If I did this wrong, please let me know. It feels like a pretty simple task, but you said it would be hard.
+```
+
+### Part 3
+
+I want you to write a function for calculating a confidence interval for the population mean when the population standard deviation is known. R doesn't actually have a function for this since it is so rare that the population standard deviation is known. (I think you took AP Stats. I am not sure if this was covered, but this is the z interval for the population mean.). The function should take 4 arguments: xbar, n, sigma, and cv which is the critical value (e.g., 1.96 for a 95% interval, 1.645 for a 90% interval, etc.). Set the default value of cv to 1.96. The interval should be calculated using:
+
+$xbar +- cv * \frac{\sigma}{\sqrt(n)}$
+
+The function should return 2 values: the lower bound for the interval and the upper bound for the interval. NOTE: Returning more than 1 value from an R function is a little tricky and requires a list. If you haven't seen this before, it will take some googling.
+
+```{r}
+CIsd<-function(xbar,n,sigma,cv){
+  upper <- xbar+cv*(sigma/(sqrt(n)))
+  lower <- xbar-cv*(sigma/(sqrt(n)))
+  ci <- c(upper,lower)
+  return(ci)
+}
+
+CIsd(5,100,0.5,1.96) # testing
+5+1.96*0.5/sqrt(100)
+```
+
+start to think about how you could write a function to automatically generate the dataset. For instance, you might have arguments that specify the number of real variables, the number of junk variables, a vector of true coefficients, a value for sigma, etc. The function would then return a dataset.
+
+
+## Task Set 2
+
+### Part 1
+Write a function to automatically generate the dataset. For instance, you might have arguments that specify the number of data points, number of real variables, number of junk variables, a vector of true coefficients, a value for sigma, etc. The function would then return a dataset. 
+
+```{r}
+makedata <- function(n,coeffs,sd){
+  x1 <- runif(n=n, min = 5, max = 7)
+  x2 <- runif(n=n, min = -2, max = 4)
+  epsilon <- rnorm(n, mean = 0, sd = sd)
+  y <- coeffs[1]+coeffs[2]*x1+coeffs[3]*x2+epsilon
+  j1 <- runif(n=n, min=-10, max=10)
+  j2 <- runif(n=n, min=-1, max=1)
+  jcategorical <- sample(c("a","b","c","d","e"),size=n,replace=TRUE)%>%
+    as.factor()
+  df <- data.frame(x1=x1,x2=x2,y=y, j1=j1, j2=j2, jcategorical=jcategorical)
+}
+testdata <- makedata(100,c(3,1.5,-2),sqrt(0.5))
+testdata
+```
+
+```{r}
+makedata2 <- function(n, reals, junks, realbounds, junkbounds,coeffs,sd){
+  df <- data.frame(matrix(nrow=n,ncol=0))
+  
+  for (i in 1:reals){
+    dfx <- data.frame(x=runif(n=n,min=realbounds[2*i-1],max=realbounds[2*i]))
+    colnames(dfx)[1] <- paste0("x",i)
+    df <- cbind(df,dfx)
+  }
+  
+  for(i in 1:junks){
+    dfj <- data.frame(j=runif(n=n, min=junkbounds[2*i-1], max=junkbounds[2*i]))
+    colnames(dfj)[1]<-paste0("j",i)
+    df<-cbind(df,dfj)
+  }
+  
+  y <- data.frame()
+  epsilon <- rnorm(n, mean = 0, sd = sd)
+  for(i in 1:n){
+    ysingle <- data.frame(y=sum(unlist(df[i,1:reals])*coeffs)+epsilon[i])
+    y <- rbind(y,ysingle)
+  }
+  df <- cbind(df,y)
+  
+  return(df)
+}
+
+
+testdata2 <- makedata2(100, 3, 2, c(-3,5,1,9,-6,3), c(-10,10,-1,1), c(1,2,3),sqrt(0.5))
+```
+
+
+
+### Part 2
+Write a loop to cycle through the dataset and store all results. End result of loop should be a dataframe. Each row should summarize information about the dataset used in that iteration and the results of the variable selection. If you run the code again, do you get the same results? Try this for a small number of datasets (say 3) to see if you believe it is working or not at first. Then, you can expand. 
+
+```{r}
+multidatasets <- function(n, count){
+  overview<-data.frame()
+  data <- list()
+  for(i in 1:count){
+    #set.seed(i*123*Sys.time())
+    realcount <- sample(c(1:5),size=1)
+    junkcount <- sample(c(1:5),size=1)
+    realevenvec <- rep(c(0,11), length(realcount))
+    junkevenvec <- rep(c(0,11), length(junkcount))
+    coeffs <- runif(n=realcount, min=-10, max=10)
+    sd <- runif(n=1, min=0.3, max=1.5)
+    rbounds <- runif(n=2*realcount, min=-10,max=0)+realevenvec
+    jbounds <- runif(n=2*junkcount,min=-10,max=0)+junkevenvec
+    data[[i]] <- makedata2(n, realcount,junkcount, rbounds,jbounds,coeffs,sd)
+    summary <- data.frame(Reals = realcount, Junks = junkcount,MeanY = mean(data[[i]]$y))
+    overview<-rbind(overview,summary)
+  }
+  return(overview)
+}
+
+multidatasets(100,3)
+```
+
+
+
+
