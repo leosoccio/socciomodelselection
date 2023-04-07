@@ -183,7 +183,6 @@ multidatasets <- function(n, count){
   overview<-data.frame()
   data <- list()
   for(i in 1:count){
-    #set.seed(i*123*Sys.time())
     realcount <- sample(c(1:5),size=1)
     junkcount <- sample(c(1:5),size=1)
     realevenvec <- rep(c(0,11), length(realcount))
@@ -193,7 +192,8 @@ multidatasets <- function(n, count){
     rbounds <- runif(n=2*realcount, min=-10,max=0)+realevenvec
     jbounds <- runif(n=2*junkcount,min=-10,max=0)+junkevenvec
     data[[i]] <- makedata2(n, realcount,junkcount, rbounds,jbounds,coeffs,sd)
-    summary <- data.frame(Reals = realcount, Junks = junkcount,MeanY = mean(data[[i]]$y))
+    summary <- data.frame(Reals = realcount, Junks = junkcount,MeanY = mean(data[[i]]$y), 
+                          TrueEquation = paste("y=",paste0(c(round(coeffs[1:realcount],digits=2)), c(rep("x", realcount)),collapse=" + ")), sd=sd)
     overview<-rbind(overview,summary)
   }
   return(overview)
